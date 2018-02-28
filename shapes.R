@@ -3,7 +3,7 @@ require(tidyverse)
 require(EBImage)
 
 # Set wd where images are located
-setwd("/Users/robinedwards/Documents/OSU/frog_detector/shapes")
+setwd("/Users/robinedwards/Documents/github/shape_classification/")
 # Set d where to save images
 
 # Set width
@@ -11,112 +11,88 @@ w <- 28
 # Set height
 h <- 28
 
-shape = "star"
-source_folder = 'star/'
-new_folder = 'star_new/'
+sets = c('star', 'trig')
 
-source_folder = 'trig/'
-new_folder = 'trig_new/'
+for(shape in sets){
+  source_folder = paste0(shape, '/')
+  new_folder = paste0(shape, '_new/')
+  dir.create(new_folder, showWarnings=F)
 
-# Load images names
-images <- list.files(source_folder)
+  # Load images names
+  images <- list.files(source_folder)
 
-# Main loop resize images and set them to greyscale
-for(i in 1:length(images))
-{
-  # Try-catch is necessary since some images
-  # may not work.
-  result <- tryCatch({
-    # Image name
-    imgname <- images[i]
-    # Read image
-    img <- readImage(paste0(source_folder, images[i]))
-    # Resize image 28x28
-    img_resized <- resize(img, w = w, h = h)
-    # Set to grayscale
-    grayimg <- channel(img_resized,"gray")
-    # Path to file
-    path <- paste(new_folder, imgname, sep = "")
-    # Save image
-    writeImage(grayimg, path, quality = 70)
-    # Print status
-    if(i %% 100 == 0) print(paste("Done",i,sep = " "))},
-    # Error function
-    error = function(e){print(e)})
+  # Main loop resize images and set them to greyscale
+  for(i in 1:length(images))
+  {
+    # Try-catch is necessary since some images
+    # may not work.
+    result <- tryCatch({
+      # Image name
+      imgname <- images[i]
+      # Read image
+      img <- readImage(paste0(source_folder, images[i]))
+      # Resize image 28x28
+      img_resized <- resize(img, w = w, h = h)
+      # Set to grayscale
+      grayimg <- channel(img_resized,"gray")
+      # Path to file
+      path <- paste(new_folder, imgname, sep = "")
+      # Save image
+      writeImage(grayimg, path, quality = 70)
+      # Print status
+      if(i %% 100 == 0) print(paste("Done",i,sep = " "))},
+      # Error function
+      error = function(e){print(e)})
+  }
+
+
+  # Generate a train-test dataset
+
+  # Out file
+  out_file <- paste0(shape,"_28.csv")
+
+  # List images in path
+  images <- list.files(paste0(shape,'_new/'))
+
+  # Set up df
+  # df <- data.frame()
+
+  # Set image size. In this case 28x28
+  img_size <- 28*28
+
+  # Set label
+  label <- match(shape, sets)
+
+  # # Main loop. Loop over each image
+  # for(i in 1:length(images))
+
+  df = lapply(images, function(fn){
+    img <- readImage(paste0(new_folder, fn))
+    # Get the image as a matrix
+    img_matrix <- img@.Data
+    # Coerce to a vector
+    img_vector <- as.vector(t(img_matrix))
+    # Add label
+    t(c(label, img_vector))
+  }) %>% lapply(as.data.frame) %>% bind_rows()
+
+  # Set names
+  names(df) <- c("label", paste("pixel", c(1:img_size)))
+
+  # Write out dataset
+  write.csv(df, out_file, row.names = FALSE)
 }
 
-
-# Generate a train-test dataset
-
-# Out file
-out_file <- paste0(shape,"_28.csv")
-
-# List images in path
-images <- list.files(paste0(shape,'_new/'))
-
-# Set up df
-df <- data.frame()
-
-# Set image size. In this case 28x28
-img_size <- 28*28
-
-# Set label
-label <- 1
-
-# Main loop. Loop over each image
-for(i in 1:length(images))
-{
-  # Read image
-  img <- readImage(paste0(, images[i]))
-  # Get the image as a matrix
-  img_matrix <- img@.Data
-  # Coerce to a vector
-  img_vector <- as.vector(t(img_matrix))
-  # Add label
-  vec <- c(label, img_vector)
-  # Bind rows
-  df <- rbind(df,vec)
-  # Print status info
-  print(paste("Done ", i, sep = ""))
-}
-
-df = lapply(images, function(fn){
-  img <- readImage(paste0(new_folder, fn))
-  # Get the image as a matrix
-  img_matrix <- img@.Data
-  # Coerce to a vector
-  img_vector <- as.vector(t(img_matrix))
-  # Add label
-  c(label, img_vector)
-}) %>% lapply(as.data.frame) %>% bind_rows()
-
-process_img <- function(fn){
-  img <- readImage(paste0(new_folder, fn))
-  # Get the image as a matrix
-  img_matrix <- img@.Data
-  # Coerce to a vector
-  img_vector <- as.vector(t(img_matrix))
-  # Add label
-  as.data.frame(t(c(label, img_vector)))
-}
-
-map_df(images, process_img)
-
-# Set names
-names(df) <- c("label", paste("pixel", c(1:img_size)))
-
-# Write out dataset
-write.csv(df, out_file, row.names = FALSE)
 
 #-------------------------------------------------------------------------------
 # Test and train split and shuffle
 
 # Load datasets
-plants <- read.csv("plants_28.csv")
-dogs <- read.csv("dogs_28.csv") %>% mutate(label = 2)
+stars <- read.csv("star_28.csv")
+trigs <- read.csv("trig_28.csv")
 
 # Bind rows in a single dataset
-new <- rbind(plants, dogs)
+new <- rbind(stars, trigs)
 
 # Shuffle new dataset
 shuffled <- new[sample(1:nrow(new)),]
@@ -189,19 +165,13 @@ model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y,
                                      epoch.end.callback = mx.callback.log.train.metric(100))
 
 
-
-
 predict(model, newdata = train_x)
 
 # Test on 312 samples
 predict_probs <- predict(model, test_array)
 predicted_labels <- max.col(t(predict_probs)) - 1
 table(test__[,1], predicted_labels)
-sum(diag(table(test__[,1], predicted_labels)))/312
-
-
-
-data_frame(observation = test$label, predictions = )
+sum(diag(table(test__[,1], predicted_labels)))/dim(test_array)[4] # I changed the divisor
 
 
 ##############################################
@@ -215,5 +185,3 @@ data_frame(observation = test$label, predictions = )
 #
 # [1] 0.7412141
 #
-
-
